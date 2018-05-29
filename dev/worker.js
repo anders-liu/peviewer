@@ -83,6 +83,7 @@
 exports.__esModule = true;
 var M = __webpack_require__(/*! ./message */ "./src/worker/message.ts");
 var image_1 = __webpack_require__(/*! ./pe/image */ "./src/worker/pe/image.ts");
+var generator_1 = __webpack_require__(/*! ./page-data/generator */ "./src/worker/page-data/generator.ts");
 var pe = null;
 onmessage = function (ev) {
     var msg = ev.data;
@@ -95,8 +96,18 @@ onmessage = function (ev) {
 function handleReqOpenFile(msg) {
     var reader = new FileReader();
     reader.onload = function (ev) {
-        var buf = ev.target.result;
-        pe = image_1.PEImage.load(buf);
+        try {
+            var buf = ev.target.result;
+            pe = image_1.PEImage.load(buf);
+            var pageData = generator_1.generatePageData(pe, "HEADERS");
+            var msg_1 = M.createResPageDataMessage(pageData);
+            postMessage(msg_1);
+        }
+        catch (ex) {
+            var msg_2 = M.createResPEErrorMessage(ex.message
+                || "Unknown error: " + JSON.stringify(ex));
+            postMessage(msg_2);
+        }
     };
     reader.onerror = function (ev) {
         pe = null;
@@ -140,6 +151,241 @@ function createResPEErrorMessage(error) {
     };
 }
 exports.createResPEErrorMessage = createResPEErrorMessage;
+
+
+/***/ }),
+
+/***/ "./src/worker/page-data/formatter.ts":
+/*!*******************************************!*\
+  !*** ./src/worker/page-data/formatter.ts ***!
+  \*******************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+exports.__esModule = true;
+function formatU1RawHex(d) {
+    return padZeroLeft(d.toString(16).toUpperCase(), 2);
+}
+exports.formatU1RawHex = formatU1RawHex;
+function formatU2RawHex(d) {
+    return padZeroLeft(d.toString(16).toUpperCase(), 4);
+}
+exports.formatU2RawHex = formatU2RawHex;
+function formatU4RawHex(d) {
+    return padZeroLeft(d.toString(16).toUpperCase(), 8);
+}
+exports.formatU4RawHex = formatU4RawHex;
+function formatU1Hex(d) {
+    return formatU1RawHex(d) + "h";
+}
+exports.formatU1Hex = formatU1Hex;
+function formatU2Hex(d) {
+    return formatU2RawHex(d) + "h";
+}
+exports.formatU2Hex = formatU2Hex;
+function formatU4Hex(d) {
+    return formatU4RawHex(d) + "h";
+}
+exports.formatU4Hex = formatU4Hex;
+function formatHexDec(d) {
+    return d.toString(16).toUpperCase() + "h (" + d + ")";
+}
+exports.formatHexDec = formatHexDec;
+function formatBytes(bytes, lineWidth) {
+    if (lineWidth === void 0) { lineWidth = 16; }
+    var lines = [];
+    for (var start = 0; start < bytes.length; start += lineWidth) {
+        var line = Array.from(bytes.subarray(start, start + lineWidth))
+            .map(function (b) { return formatU1RawHex(b); }).join("-");
+        lines.push(line);
+    }
+    return lines;
+}
+exports.formatBytes = formatBytes;
+function formatStructTitle(s, title) {
+    return title + " [" + formatU4Hex(s._offset) + " - " + formatU4Hex(s._offset + s._size) + " : " + formatHexDec(s._size) + "]";
+}
+exports.formatStructTitle = formatStructTitle;
+function formatU1Field(name, f, showDec) {
+    return formatUIntField(name, f, 1, showDec);
+}
+exports.formatU1Field = formatU1Field;
+function formatU2Field(name, f, showDec) {
+    return formatUIntField(name, f, 2, showDec);
+}
+exports.formatU2Field = formatU2Field;
+function formatU4Field(name, f, showDec) {
+    return formatUIntField(name, f, 4, showDec);
+}
+exports.formatU4Field = formatU4Field;
+function formatU8Field(name, f) {
+    return {
+        offset: formatU4Hex(f._offset),
+        size: formatHexDec(f._size),
+        rawData: formatBytes(f.data),
+        name: name,
+        value: formatU4RawHex(f.high) + " " + formatU4Hex(f.low)
+    };
+}
+exports.formatU8Field = formatU8Field;
+function formatBytesField(name, f) {
+    return {
+        offset: formatU4Hex(f._offset),
+        size: formatHexDec(f._size),
+        rawData: formatBytes(f.data),
+        name: name,
+        value: ""
+    };
+}
+exports.formatBytesField = formatBytesField;
+function padZeroLeft(str, len) {
+    if (str.length < len) {
+        return "0".repeat(len - str.length) + str;
+    }
+    else {
+        return str;
+    }
+}
+function formatUIntField(name, f, sz, showDec) {
+    var hex;
+    switch (sz) {
+        case 1:
+            hex = formatU1Hex(f.value);
+            break;
+        case 2:
+            hex = formatU2Hex(f.value);
+            break;
+        case 4:
+            hex = formatU4Hex(f.value);
+            break;
+        default:
+            hex = f.value.toString(16).toUpperCase();
+            break;
+    }
+    return {
+        offset: formatU4Hex(f._offset),
+        size: formatHexDec(f._size),
+        rawData: formatBytes(f.data),
+        name: name,
+        value: showDec ? hex + " (" + f.value + ")" : hex
+    };
+}
+
+
+/***/ }),
+
+/***/ "./src/worker/page-data/generator.ts":
+/*!*******************************************!*\
+  !*** ./src/worker/page-data/generator.ts ***!
+  \*******************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+exports.__esModule = true;
+var headers_1 = __webpack_require__(/*! ./headers */ "./src/worker/page-data/headers.ts");
+function generatePageData(pe, pageID) {
+    switch (pageID) {
+        case "HEADERS": return headers_1.generateHeadersPageData(pe);
+        default: return { id: "NOTFOUND", title: "Page Not Found" };
+    }
+}
+exports.generatePageData = generatePageData;
+
+
+/***/ }),
+
+/***/ "./src/worker/page-data/headers.ts":
+/*!*****************************************!*\
+  !*** ./src/worker/page-data/headers.ts ***!
+  \*****************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+exports.__esModule = true;
+var FM = __webpack_require__(/*! ./formatter */ "./src/worker/page-data/formatter.ts");
+function generateHeadersPageData(pe) {
+    return {
+        id: "HEADERS",
+        title: "Headers",
+        dosHeader: generateDosHeader(pe),
+        peSignature: generatePESignature(pe),
+        fileHeader: generateFileHeader(pe),
+        optionalHeader: generateOptionalHeader(pe),
+        sectionHeaders: generateSectionHeaders(pe)
+    };
+}
+exports.generateHeadersPageData = generateHeadersPageData;
+function generateDosHeader(pe) {
+    var s = {
+        title: "DOS Header",
+        elemID: "dos-hdr"
+    };
+    var h = pe.getDosHeader();
+    if (!h)
+        return s;
+    s.items = [
+        FM.formatU2Field("e_magic", h.e_magic),
+        FM.formatU2Field("e_cblp", h.e_cblp),
+        FM.formatU2Field("e_cp", h.e_cp),
+        FM.formatU2Field("e_crlc", h.e_crlc),
+        FM.formatU2Field("e_cparhdr", h.e_cparhdr),
+        FM.formatU2Field("e_minalloc", h.e_minalloc),
+        FM.formatU2Field("e_maxalloc", h.e_maxalloc),
+        FM.formatU2Field("e_ss", h.e_ss),
+        FM.formatU2Field("e_sp", h.e_sp),
+        FM.formatU2Field("e_csum", h.e_csum),
+        FM.formatU2Field("e_ip", h.e_ip),
+        FM.formatU2Field("e_cs", h.e_cs),
+        FM.formatU2Field("e_lfarlc", h.e_lfarlc),
+        FM.formatU2Field("e_ovno", h.e_ovno),
+        FM.formatBytesField("e_res", h.e_res),
+        FM.formatU2Field("e_oemid", h.e_oemid),
+        FM.formatU2Field("e_oeminfo", h.e_oeminfo),
+        FM.formatBytesField("e_res2", h.e_res2),
+        FM.formatU4Field("e_lfanew", h.e_lfanew),
+    ];
+    return s;
+}
+function generatePESignature(pe) {
+    var s = {
+        title: "PE Signature",
+        elemID: "pe-sig"
+    };
+    var h = pe.getPESignature();
+    if (!h)
+        return s;
+    s.items = [
+        FM.formatU4Field("PE Signature", h),
+    ];
+    return s;
+}
+function generateFileHeader(pe) {
+    var s = {
+        title: "File Header",
+        elemID: "pe-hdr"
+    };
+    return s;
+}
+function generateOptionalHeader(pe) {
+    var s = {
+        title: "Optional Header",
+        elemID: "opt-hdr"
+    };
+    return s;
+}
+function generateSectionHeaders(pe) {
+    var s = {
+        title: "Section headers",
+        elemID: "sec-hdrs"
+    };
+    return s;
+}
 
 
 /***/ }),
@@ -378,6 +624,24 @@ var PEImage = (function () {
     PEImage.prototype.getData = function (p, sz) {
         this.check(p, sz);
         return new Uint8Array(this.data.buffer.slice(p, p + sz));
+    };
+    PEImage.prototype.getDosHeader = function () {
+        return this.dosHeader;
+    };
+    PEImage.prototype.getPESignature = function () {
+        return this.peSignature;
+    };
+    PEImage.prototype.getFileHeader = function () {
+        return this.fileHeader;
+    };
+    PEImage.prototype.getOptionalHeader = function () {
+        return this.optionalHeader;
+    };
+    PEImage.prototype.getDataDirectories = function () {
+        return this.dataDirectories;
+    };
+    PEImage.prototype.getSectionHeaders = function () {
+        return this.sectionHeaders;
     };
     PEImage.prototype.check = function (p, sz) {
         if (p < 0 || p >= this.data.byteLength

@@ -149,6 +149,49 @@ exports.App = App;
 
 /***/ }),
 
+/***/ "./src/ui/scripts/components/headers-page.tsx":
+/*!****************************************************!*\
+  !*** ./src/ui/scripts/components/headers-page.tsx ***!
+  \****************************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+exports.__esModule = true;
+var React = __webpack_require__(/*! react */ "react");
+var struct_data_1 = __webpack_require__(/*! ./struct-data */ "./src/ui/scripts/components/struct-data.tsx");
+var HeadersPage = (function (_super) {
+    __extends(HeadersPage, _super);
+    function HeadersPage() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    HeadersPage.prototype.render = function () {
+        var data = this.props.data;
+        return (React.createElement("section", { className: "data-page" },
+            struct_data_1.renderSimpleStruct(data.dosHeader),
+            struct_data_1.renderSimpleStruct(data.peSignature),
+            struct_data_1.renderSimpleStruct(data.fileHeader),
+            struct_data_1.renderGroupedStruct(data.optionalHeader),
+            struct_data_1.renderGroupedStruct(data.sectionHeaders)));
+    };
+    return HeadersPage;
+}(React.Component));
+exports.HeadersPage = HeadersPage;
+
+
+/***/ }),
+
 /***/ "./src/ui/scripts/components/open-file-page.tsx":
 /*!******************************************************!*\
   !*** ./src/ui/scripts/components/open-file-page.tsx ***!
@@ -189,7 +232,7 @@ var OpenFilePageClass = (function (_super) {
             React.createElement("div", null, "Select a file:"),
             React.createElement("div", null,
                 React.createElement("input", { type: "file", onChange: this.onFileChange })),
-            React.createElement("div", null, "No data would be uploaded, all things are parsed locally.")));
+            React.createElement("div", null, "No data would be uploaded, everything is parsed locally.")));
     };
     OpenFilePageClass.prototype.onFileChange = function (ev) {
         var onFileSelected = this.props.onFileSelected;
@@ -228,8 +271,12 @@ exports.__esModule = true;
 var React = __webpack_require__(/*! react */ "react");
 var ReactRedux = __webpack_require__(/*! react-redux */ "react-redux");
 var open_file_page_1 = __webpack_require__(/*! ./open-file-page */ "./src/ui/scripts/components/open-file-page.tsx");
+var headers_page_1 = __webpack_require__(/*! ./headers-page */ "./src/ui/scripts/components/headers-page.tsx");
 function mapStateToProps(state) {
-    return {};
+    var pageData = state.pageData;
+    return {
+        pageData: pageData
+    };
 }
 var PageContentClass = (function (_super) {
     __extends(PageContentClass, _super);
@@ -237,8 +284,19 @@ var PageContentClass = (function (_super) {
         return _super !== null && _super.apply(this, arguments) || this;
     }
     PageContentClass.prototype.render = function () {
-        return (React.createElement("section", { id: "app-content" },
-            React.createElement(open_file_page_1.OpenFilePage, null)));
+        return (React.createElement("section", { id: "app-content" }, this.renderContent()));
+    };
+    PageContentClass.prototype.renderContent = function () {
+        var pageData = this.props.pageData;
+        if (pageData == null) {
+            return React.createElement(open_file_page_1.OpenFilePage, null);
+        }
+        switch (pageData.id) {
+            case "HEADERS":
+                return React.createElement(headers_page_1.HeadersPage, { data: pageData });
+            default:
+                return React.createElement("div", null, "Page not found.");
+        }
     };
     return PageContentClass;
 }(React.Component));
@@ -341,6 +399,77 @@ exports.PageHeader = PageHeader;
 
 /***/ }),
 
+/***/ "./src/ui/scripts/components/struct-data.tsx":
+/*!***************************************************!*\
+  !*** ./src/ui/scripts/components/struct-data.tsx ***!
+  \***************************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return function (d, b) {
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+exports.__esModule = true;
+var React = __webpack_require__(/*! react */ "react");
+function renderSimpleStruct(s) {
+    return (React.createElement("div", { className: "struct-data" },
+        renderStructTitle(s.title),
+        React.createElement(StructTable, null, s.items && s.items.map(function (v, i) { return renderStructItemRow(v, i); }))));
+}
+exports.renderSimpleStruct = renderSimpleStruct;
+function renderGroupedStruct(s) {
+    return (React.createElement("div", { className: "struct-data" }, renderStructTitle(s.title)));
+}
+exports.renderGroupedStruct = renderGroupedStruct;
+function renderStructTitle(title) {
+    return React.createElement("h2", null, title);
+}
+function renderStructItemRow(item, key) {
+    var offset = item.offset, size = item.size, rawData = item.rawData, name = item.name, value = item.value, descriptions = item.descriptions;
+    return (React.createElement("tr", { key: key },
+        React.createElement("td", null, offset),
+        React.createElement("td", null, size),
+        React.createElement("td", null, rawData.map(function (v, i) { return React.createElement("div", { className: "td-line", key: i }, v); })),
+        React.createElement("td", null, name),
+        React.createElement("td", null, value),
+        React.createElement("td", null)));
+}
+function renderStructGroupTitleRow(title) {
+    return (React.createElement("tr", null,
+        React.createElement("th", { colSpan: 6 }, title)));
+}
+var StructTable = (function (_super) {
+    __extends(StructTable, _super);
+    function StructTable() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    StructTable.prototype.render = function () {
+        return (React.createElement("table", { className: "struct-table" },
+            React.createElement("thead", null,
+                React.createElement("tr", null,
+                    React.createElement("th", null, "Offset"),
+                    React.createElement("th", null, "Size"),
+                    React.createElement("th", null, "Raw Data"),
+                    React.createElement("th", null, "Name"),
+                    React.createElement("th", null, "Value"),
+                    React.createElement("th", null, "Description"))),
+            React.createElement("tbody", null, this.props.children)));
+    };
+    return StructTable;
+}(React.Component));
+
+
+/***/ }),
+
 /***/ "./src/ui/scripts/index.tsx":
 /*!**********************************!*\
   !*** ./src/ui/scripts/index.tsx ***!
@@ -369,8 +498,7 @@ var appInfo = {
     year: new Date().getFullYear().toString()
 };
 var defaultState = {
-    appInfo: appInfo,
-    fileInfo: null
+    appInfo: appInfo
 };
 document.title = "" + appInfo.title;
 var _w = window;
@@ -400,6 +528,13 @@ function createOpenFileAction(file) {
     };
 }
 exports.createOpenFileAction = createOpenFileAction;
+function createSetPageDataAction(data) {
+    return {
+        type: "SET_PAGE_DATA",
+        data: data
+    };
+}
+exports.createSetPageDataAction = createSetPageDataAction;
 
 
 /***/ }),
@@ -417,7 +552,8 @@ exports.__esModule = true;
 var Redux = __webpack_require__(/*! redux */ "redux");
 exports.appReducer = Redux.combineReducers({
     appInfo: appInfo,
-    fileInfo: fileInfo
+    fileInfo: fileInfo,
+    pageData: pageData
 });
 function appInfo(state, action) {
     if (state === void 0) { state = null; }
@@ -430,6 +566,16 @@ function fileInfo(state, action) {
             var file = action.file;
             var name_1 = file.name, size = file.size;
             return Object.assign({}, state, { name: name_1, size: size });
+        }
+        default: return state;
+    }
+}
+function pageData(state, action) {
+    if (state === void 0) { state = null; }
+    switch (action.type) {
+        case "SET_PAGE_DATA": {
+            var data = action.data;
+            return data;
         }
         default: return state;
     }
@@ -448,6 +594,7 @@ function fileInfo(state, action) {
 "use strict";
 
 exports.__esModule = true;
+var A = __webpack_require__(/*! ./store/actions */ "./src/ui/scripts/store/actions.ts");
 var WM = __webpack_require__(/*! ./worker-message */ "./src/ui/scripts/worker-message.ts");
 exports.workerClientMiddleware = (function (store) { return function (next) { return function (action) {
     switch (action.type) {
@@ -467,9 +614,14 @@ function initWorkerClient(store) {
 exports.initWorkerClient = initWorkerClient;
 function handleMessage(msg) {
     switch (msg.type) {
-        case "RES_NAV_DATA": break;
-        case "RES_PAGE_DATA": break;
-        case "RES_PE_ERROR": break;
+        case "RES_NAV_DATA":
+            break;
+        case "RES_PAGE_DATA":
+            var pageData = msg.pageData;
+            _store.dispatch(A.createSetPageDataAction(pageData));
+            break;
+        case "RES_PE_ERROR":
+            break;
     }
 }
 var _worker;
