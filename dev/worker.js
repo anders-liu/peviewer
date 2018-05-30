@@ -220,13 +220,18 @@ function formatU4Field(name, f, showDec) {
     return formatUIntField(name, f, 4, showDec);
 }
 exports.formatU4Field = formatU4Field;
-function formatU8Field(name, f) {
+function formatU8Field(name, f, showDec) {
+    var value = formatU4RawHex(f.high) + " " + formatU4Hex(f.low);
+    if (showDec && f.high < 0x1FFFFF) {
+        var long = f.high * 0x100000000 + f.low;
+        value += " (" + formatDec(long) + ")";
+    }
     return {
         offset: formatU4Hex(f._offset),
         size: formatHexDec(f._size),
         rawData: formatBytes(f.data),
         name: name,
-        value: formatU4RawHex(f.high) + " " + formatU4Hex(f.low)
+        value: value
     };
 }
 exports.formatU8Field = formatU8Field;
@@ -240,6 +245,16 @@ function formatBytesField(name, f) {
     };
 }
 exports.formatBytesField = formatBytesField;
+function formatStringField(name, f) {
+    return {
+        offset: formatU4Hex(f._offset),
+        size: formatHexDec(f._size),
+        rawData: formatBytes(f.data),
+        name: name,
+        value: "\"" + f.value + "\""
+    };
+}
+exports.formatStringField = formatStringField;
 function padZeroLeft(str, len) {
     if (str.length < len) {
         return "0".repeat(len - str.length) + str;
@@ -269,8 +284,11 @@ function formatUIntField(name, f, sz, showDec) {
         size: formatHexDec(f._size),
         rawData: formatBytes(f.data),
         name: name,
-        value: showDec ? hex + " (" + f.value + ")" : hex
+        value: showDec ? hex + " (" + formatDec(f.value) + ")" : hex
     };
+}
+function formatDec(v) {
+    return v.toLocaleString();
 }
 
 
@@ -308,6 +326,7 @@ exports.generatePageData = generatePageData;
 "use strict";
 
 exports.__esModule = true;
+var F = __webpack_require__(/*! ../pe/image-flags */ "./src/worker/pe/image-flags.ts");
 var FM = __webpack_require__(/*! ./formatter */ "./src/worker/page-data/formatter.ts");
 function generateHeadersPageData(pe) {
     return {
@@ -317,6 +336,7 @@ function generateHeadersPageData(pe) {
         peSignature: generatePESignature(pe),
         fileHeader: generateFileHeader(pe),
         optionalHeader: generateOptionalHeader(pe),
+        dataDirectories: generateDataDirectories(pe),
         sectionHeaders: generateSectionHeaders(pe)
     };
 }
@@ -370,6 +390,18 @@ function generateFileHeader(pe) {
         title: "File Header",
         elemID: "pe-hdr"
     };
+    var h = pe.getFileHeader();
+    if (!h)
+        return s;
+    s.items = [
+        FM.formatU2Field("Machine", h.Machine),
+        FM.formatU2Field("NumberOfSections", h.NumberOfSections, true),
+        FM.formatU4Field("TimeDateStamp", h.TimeDateStamp),
+        FM.formatU4Field("PointerToSymbolTable", h.PointerToSymbolTable),
+        FM.formatU4Field("NumberOfSymbols", h.NumberOfSymbols, true),
+        FM.formatU2Field("SizeOfOptionalHeader", h.SizeOfOptionalHeader, true),
+        FM.formatU2Field("Characteristics", h.Characteristics),
+    ];
     return s;
 }
 function generateOptionalHeader(pe) {
@@ -377,6 +409,117 @@ function generateOptionalHeader(pe) {
         title: "Optional Header",
         elemID: "opt-hdr"
     };
+    var h = pe.getOptionalHeader();
+    if (!h)
+        return s;
+    switch (h.Magic.value) {
+        case F.IMAGE_NT_OPTIONAL_HDR32_MAGIC:
+            s.title += " (32-bit)";
+            fillOptionalHeader32Fields(s, h);
+            break;
+        case F.IMAGE_NT_OPTIONAL_HDR64_MAGIC:
+            s.title += " (64-bit)";
+            fillOptionalHeader64Fields(s, h);
+            break;
+    }
+    return s;
+}
+function fillOptionalHeader32Fields(s, h) {
+    s.groups = [{
+            title: "Standard Fields",
+            items: [
+                FM.formatU2Field("Magic", h.Magic),
+                FM.formatU1Field("MajorLinkerVersion", h.MajorLinkerVersion, true),
+                FM.formatU1Field("MinorLinkerVersion", h.MinorLinkerVersion, true),
+                FM.formatU4Field("SizeOfCode", h.SizeOfCode, true),
+                FM.formatU4Field("SizeOfInitializedData", h.SizeOfInitializedData, true),
+                FM.formatU4Field("SizeOfUninitializedData", h.SizeOfUninitializedData, true),
+                FM.formatU4Field("AddressOfEntryPoint", h.AddressOfEntryPoint),
+                FM.formatU4Field("BaseOfCode", h.BaseOfCode),
+                FM.formatU4Field("BaseOfData", h.BaseOfData),
+            ]
+        }, {
+            title: "NT-specified Fields",
+            items: [
+                FM.formatU4Field("ImageBase", h.ImageBase),
+                FM.formatU4Field("SectionAlignment", h.SectionAlignment, true),
+                FM.formatU4Field("FileAlignment", h.FileAlignment, true),
+                FM.formatU2Field("MajorOperatingSystemVersion", h.MajorOperatingSystemVersion, true),
+                FM.formatU2Field("MinorOperatingSystemVersion", h.MinorOperatingSystemVersion, true),
+                FM.formatU2Field("MajorImageVersion", h.MajorImageVersion, true),
+                FM.formatU2Field("MinorImageVersion", h.MinorImageVersion, true),
+                FM.formatU2Field("MajorSubsystemVersion", h.MajorSubsystemVersion, true),
+                FM.formatU2Field("MinorSubsystemVersion", h.MinorSubsystemVersion, true),
+                FM.formatU4Field("Win32VersionValue", h.Win32VersionValue, true),
+                FM.formatU4Field("SizeOfImage", h.SizeOfImage, true),
+                FM.formatU4Field("SizeOfHeaders", h.SizeOfHeaders, true),
+                FM.formatU4Field("CheckSum", h.CheckSum),
+                FM.formatU2Field("Subsystem", h.Subsystem),
+                FM.formatU2Field("DllCharacteristics", h.DllCharacteristics),
+                FM.formatU4Field("SizeOfStackReserve", h.SizeOfStackReserve, true),
+                FM.formatU4Field("SizeOfStackCommit", h.SizeOfStackCommit, true),
+                FM.formatU4Field("SizeOfHeapReserve", h.SizeOfHeapReserve, true),
+                FM.formatU4Field("SizeOfHeapCommit", h.SizeOfHeapCommit, true),
+                FM.formatU4Field("LoaderFlags", h.LoaderFlags),
+                FM.formatU4Field("NumberOfRvaAndSizes", h.NumberOfRvaAndSizes, true),
+            ]
+        }];
+}
+function fillOptionalHeader64Fields(s, h) {
+    s.groups = [{
+            title: "Standard Fields",
+            items: [
+                FM.formatU2Field("Magic", h.Magic),
+                FM.formatU1Field("MajorLinkerVersion", h.MajorLinkerVersion, true),
+                FM.formatU1Field("MinorLinkerVersion", h.MinorLinkerVersion, true),
+                FM.formatU4Field("SizeOfCode", h.SizeOfCode, true),
+                FM.formatU4Field("SizeOfInitializedData", h.SizeOfInitializedData, true),
+                FM.formatU4Field("SizeOfUninitializedData", h.SizeOfUninitializedData, true),
+                FM.formatU4Field("AddressOfEntryPoint", h.AddressOfEntryPoint),
+                FM.formatU4Field("BaseOfCode", h.BaseOfCode),
+            ]
+        }, {
+            title: "NT-specified Fields",
+            items: [
+                FM.formatU8Field("ImageBase", h.ImageBase),
+                FM.formatU4Field("SectionAlignment", h.SectionAlignment, true),
+                FM.formatU4Field("FileAlignment", h.FileAlignment, true),
+                FM.formatU2Field("MajorOperatingSystemVersion", h.MajorOperatingSystemVersion, true),
+                FM.formatU2Field("MinorOperatingSystemVersion", h.MinorOperatingSystemVersion, true),
+                FM.formatU2Field("MajorImageVersion", h.MajorImageVersion, true),
+                FM.formatU2Field("MinorImageVersion", h.MinorImageVersion, true),
+                FM.formatU2Field("MajorSubsystemVersion", h.MajorSubsystemVersion, true),
+                FM.formatU2Field("MinorSubsystemVersion", h.MinorSubsystemVersion, true),
+                FM.formatU4Field("Win32VersionValue", h.Win32VersionValue, true),
+                FM.formatU4Field("SizeOfImage", h.SizeOfImage, true),
+                FM.formatU4Field("SizeOfHeaders", h.SizeOfHeaders, true),
+                FM.formatU4Field("CheckSum", h.CheckSum),
+                FM.formatU2Field("Subsystem", h.Subsystem),
+                FM.formatU2Field("DllCharacteristics", h.DllCharacteristics),
+                FM.formatU8Field("SizeOfStackReserve", h.SizeOfStackReserve, true),
+                FM.formatU8Field("SizeOfStackCommit", h.SizeOfStackCommit, true),
+                FM.formatU8Field("SizeOfHeapReserve", h.SizeOfHeapReserve, true),
+                FM.formatU8Field("SizeOfHeapCommit", h.SizeOfHeapCommit, true),
+                FM.formatU4Field("LoaderFlags", h.LoaderFlags),
+                FM.formatU4Field("NumberOfRvaAndSizes", h.NumberOfRvaAndSizes, true),
+            ]
+        }];
+}
+function generateDataDirectories(pe) {
+    var s = {
+        title: "Data Dreictories",
+        elemID: "data-dir"
+    };
+    var h = pe.getDataDirectories();
+    if (!h)
+        return s;
+    s.groups = h.items.map(function (v, i) { return ({
+        title: "[" + i + "] " + (F.ImageDirectoryEntry[i] || ""),
+        items: [
+            FM.formatU4Field("VirtualAddress", v.VirtualAddress),
+            FM.formatU4Field("Size", v.Size, true),
+        ]
+    }); });
     return s;
 }
 function generateSectionHeaders(pe) {
@@ -384,6 +527,24 @@ function generateSectionHeaders(pe) {
         title: "Section headers",
         elemID: "sec-hdrs"
     };
+    var h = pe.getSectionHeaders();
+    if (!h)
+        return s;
+    s.groups = h.items.map(function (v, i) { return ({
+        title: "[" + i + "]",
+        items: [
+            FM.formatStringField("Name", v.Name),
+            FM.formatU4Field("VirtualSize", v.VirtualSize, true),
+            FM.formatU4Field("VirtualAddress", v.VirtualAddress),
+            FM.formatU4Field("SizeOfRawData", v.SizeOfRawData, true),
+            FM.formatU4Field("PointerToRawData", v.PointerToRawData),
+            FM.formatU4Field("PointerToRelocations", v.PointerToRelocations),
+            FM.formatU4Field("PointerToLinenumbers", v.PointerToLinenumbers),
+            FM.formatU2Field("NumberOfRelocations", v.NumberOfRelocations, true),
+            FM.formatU2Field("NumberOfLinenumbers", v.NumberOfLinenumbers, true),
+            FM.formatU4Field("Characteristics", v.Characteristics),
+        ]
+    }); });
     return s;
 }
 

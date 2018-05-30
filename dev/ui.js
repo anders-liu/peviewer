@@ -183,6 +183,7 @@ var HeadersPage = (function (_super) {
             struct_data_1.renderSimpleStruct(data.peSignature),
             struct_data_1.renderSimpleStruct(data.fileHeader),
             struct_data_1.renderGroupedStruct(data.optionalHeader),
+            struct_data_1.renderGroupedStruct(data.dataDirectories),
             struct_data_1.renderGroupedStruct(data.sectionHeaders)));
     };
     return HeadersPage;
@@ -422,16 +423,24 @@ exports.__esModule = true;
 var React = __webpack_require__(/*! react */ "react");
 function renderSimpleStruct(s) {
     return (React.createElement("div", { className: "struct-data" },
-        renderStructTitle(s.title),
-        React.createElement(StructTable, null, s.items && s.items.map(function (v, i) { return renderStructItemRow(v, i); }))));
+        renderStructTitle(s),
+        React.createElement(StructTable, null, s.items && s.items.map(function (v, i) { return renderStructItemRow(v, i.toString()); }))));
 }
 exports.renderSimpleStruct = renderSimpleStruct;
 function renderGroupedStruct(s) {
-    return (React.createElement("div", { className: "struct-data" }, renderStructTitle(s.title)));
+    return (React.createElement("div", { className: "struct-data" },
+        renderStructTitle(s),
+        React.createElement(StructTable, null, s.groups && s.groups.map(function (gv, gi) {
+            return [
+                renderStructGroupTitleRow(gv.title, gi.toString())
+            ].concat(gv.items && gv.items.map(function (v, i) {
+                return renderStructItemRow(v, gi + "." + i);
+            }) || []);
+        }))));
 }
 exports.renderGroupedStruct = renderGroupedStruct;
-function renderStructTitle(title) {
-    return React.createElement("h2", null, title);
+function renderStructTitle(s) {
+    return React.createElement("h2", { id: s.elemID }, s.title);
 }
 function renderStructItemRow(item, key) {
     var offset = item.offset, size = item.size, rawData = item.rawData, name = item.name, value = item.value, descriptions = item.descriptions;
@@ -443,8 +452,8 @@ function renderStructItemRow(item, key) {
         React.createElement("td", null, value),
         React.createElement("td", null)));
 }
-function renderStructGroupTitleRow(title) {
-    return (React.createElement("tr", null,
+function renderStructGroupTitleRow(title, key) {
+    return (React.createElement("tr", { key: key },
         React.createElement("th", { colSpan: 6 }, title)));
 }
 var StructTable = (function (_super) {
